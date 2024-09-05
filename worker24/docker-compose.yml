@@ -1,0 +1,52 @@
+services:
+  inference:
+    container_name: inference-24
+    build:
+      context: .
+    command: python -u /app/app.py
+    environment:
+      - API_PORT=8012
+    ports:
+      - "8012:8012"
+    healthcheck:
+      # test: ["CMD", "curl", "-f", "http://localhost:8012/inference/ETH"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8012/inference/ETH || exit 1 && curl -f http://localhost:8012/inference/BTC || exit 1 && curl -f http://localhost:8012/inference/SOL || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 300s
+    volumes:
+      - ./inference-data:/app/data
+  
+  updater:
+    container_name: updater-24
+    build: .
+    environment:
+      - INFERENCE_API_ADDRESS=http://inference:8012
+    command: >
+      sh -c "
+      while true; do
+        python -u /app/update_app.py;
+        sleep 4h;
+      done
+      "
+    depends_on:
+      inference:
+        condition: service_healthy
+    
+  worker:
+    container_name: worker-24
+    image: alloranetwork/allora-offchain-node:latest
+    volumes:
+      - ./worker-data:/data
+    working_dir: /data
+    depends_on:
+      inference:
+        condition: service_healthy
+    env_file:
+      - ./worker-data/env_file
+    entrypoint: ["/node/allora_offchain_node"]
+
+volumes:
+  inference-data:
+  worker-data:
